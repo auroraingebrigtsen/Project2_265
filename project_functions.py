@@ -16,6 +16,7 @@ from typing import Sequence
 from math import floor, sqrt
 import time
 import random
+from torch.utils.data import TensorDataset
 
 from project_objects import Timer
 from project_constants import DEVICE as device
@@ -402,3 +403,108 @@ def plot_predictions(dataset, y_true:torch.tensor, y_pred:torch.tensor, label:in
         plt.savefig(save_dir+fig_name+'_bbox_pred', bbox_inches='tight')
         
     plt.show()
+
+
+def global_to_local(labels_list:list, grid_dimension:tuple):
+    '''
+    Transfers one list of tensors to local values
+    '''
+   
+    x = grid_dimension[1]
+    y = grid_dimension[0]
+    vector_length = grid_dimension[2]
+
+    local_tensor = torch.zeros(y,x,vector_length)
+    
+    x_grid_cells = [(i+1)/x for i in range(x)]
+    y_grid_cells = [(i+1)/y for i in range(y)]
+
+    for label in labels_list:
+        label = label.clone()
+        x_cell = next(i for i, cell in enumerate(x_grid_cells) if label[1] < cell)
+        y_cell = next(i for i, cell in enumerate(y_grid_cells) if label[2] < cell)
+
+        if x_cell != 0:
+            label[1] -= x_grid_cells[x_cell - 1]
+        if y_cell != 0:
+            label[2] -= y_grid_cells[y_cell - 1]
+
+        label[1] *= x
+        label[3] *= x
+        label[2] *= y
+        label[4] *= y
+
+        local_tensor[y_cell][x_cell] = label
+
+    return local_tensor
+
+def prepare_labels(label_dataset:list, grid_dimension:tuple):
+    '''
+    Iterates through each listed tensor, transforms from global to local coordinates, and stacks them into a new tensor.
+    '''
+
+    new_tensor = torch.stack([global_to_local(label, grid_dimension) for label in label_dataset])
+    new_tensor = new_tensor.permute(0, 3, 1, 2) 
+
+    return new_tensor
+
+def merge_datasets(d1, d2):
+    '''
+    Combines the new labels with the image data.
+    '''
+
+    return TensorDataset(d1[:][0],d2[:])
+
+def local_to_global(labels_tensor:torch.Tensor, grid_dimension:tuple):
+    '''
+    Returns to original format.
+    '''
+
+    list_of_tensors = []
+
+
+    for i in range(len(labels_tensor)):
+        inner =[]
+        x = labels_tensor[i,:,:]
+        not_all_zero = x.any(dim=-1)
+        for each in x[not_all_zero]:
+            inner.append(each)
+        if inner != []:
+            list_of_tensors.append(inner)
+
+    return list_of_tensors
+
+
+def plot_detection_data(imgs, global_labels, start_idx=0):
+    """Data should be global"""
+    _, axes = plt.subplots(nrows=2, ncols=5, figsize=(8,3))
+
+    for i, ax in enumerate(axes.flat): 
+        
+        img, labels = imgs[i+start_idx], global_labels[i+start_idx]
+        img_height, img_width = img.shape[-2], img.shape[-1]
+        img = img.clone()
+        img = (img * 255).byte()
+        labels = [labels] if not isinstance(labels, list) else labels
+        label_classes = ''
+        
+        for label in labels:
+            label_classes += f'{int(label[-1])}  '
+            bbox = label[1:5]
+            bbox = bbox.clone()
+            bbox[0] *= img_width
+            bbox[1] *= img_height
+            bbox[2] *= img_width
+            bbox[3] *= img_height
+
+            bbox = bbox.type(torch.uint8)
+
+            converted_bbox = box_convert(bbox, in_fmt='cxcywh', out_fmt='xyxy')
+
+            img = draw_bounding_boxes(img, converted_bbox.unsqueeze(0), colors='lightgreen')
+
+        img  = img.numpy().transpose((1, 2, 0))
+        ax.imshow(img, cmap='gray')
+        ax.set_title(label_classes)
+        ax.axis('off')
+        plt.suptitle(f'Image {start_idx} - {start_idx+9}')
