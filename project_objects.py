@@ -51,6 +51,7 @@ class LocalizationLoss(nn.Module):
         self.L_a = nn.BCEWithLogitsLoss()  # detection loss
         self.L_b = nn.MSELoss()  # localization loss
         self.L_c = nn.CrossEntropyLoss()  # classification loss
+        self.L_c_binary = nn.BCEWithLogitsLoss() # binary classification loss
 
     def forward(self, y_pred, y_true):
 
@@ -58,17 +59,22 @@ class LocalizationLoss(nn.Module):
         bbox_pred = y_pred[:, 1:5]
         class_pred = y_pred[:, 5:]
 
+        binary_classification = len(class_pred.shape) > 1
+
         det_true = y_true[:, 0]
         bbox_true = y_true[:, 1:5]
-        class_true = y_true[:, -1].long()
+        class_true = y_true[:, -1] if binary_classification else y_true[:, -1].long()
 
         L_a = self.L_a(det_pred, det_true)
 
         object_detected = det_true == 1
+        binary_classification = len(class_pred.shape) > 1
+
+        L_c = self.L_c_binary if binary_classification else self.L_c
 
         L_b = self.L_b(bbox_pred[object_detected], bbox_true[object_detected])
-        L_c = self.L_c(class_pred[object_detected], class_true[object_detected])
         
-        #print(y_pred[0])
-
+        predicted_objects = class_pred[object_detected].squeeze(1) if binary_classification else class_pred[object_detected]
+        L_c = L_c(predicted_objects, class_true[object_detected])
+        
         return L_a + L_b + L_c, (L_a,L_b,L_c)

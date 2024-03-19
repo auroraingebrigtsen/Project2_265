@@ -444,7 +444,7 @@ def prepare_labels(label_dataset:list, grid_dimension:tuple):
     '''
 
     new_tensor = torch.stack([global_to_local(label, grid_dimension) for label in label_dataset])
-    new_tensor = new_tensor.permute(0, 3, 1, 2) 
+    #new_tensor = new_tensor.permute(0, 3, 1, 2) 
 
     return new_tensor
 
