@@ -22,21 +22,29 @@ from project_objects import Timer
 from project_constants import DEVICE as device
 from project_constants import SEED
 
+
 def count_instances(data, data_name=None) -> None:
-    """Counts the number of instances of each class in a dataset"""
+    """Counts the number of instances of each class in a object localization dataset"""
     counter = Counter([99 if label[0] == 0 else int(label[-1]) for _, label in data])
     sorted_counter = dict(sorted(counter.items()))
     if data_name is not None:
         print(f'Class distribution in {data_name}')
     for key, value in sorted_counter.items():
         print(f'{key}: {value}') 
-        
-def plot_images(data):
+
+
+def plot_localization_data(data, class_label:int=None, start_idx:int=0) -> None:
+    """If class_label is None, plots the first image of each class in the dataset.
+    If class_label is spesificed, plots a subplot with 10 images from a given class, starting at a chosen index"""
     _, axes = plt.subplots(nrows=2, ncols=6, figsize=(8,3))
+
+    if class_label is not None:
+        class_images = [img for img, label in data if int(label[-1]) == class_label]
+        class_labels = [label for _, label in data if int(label[-1]) == class_label]
 
     for i, ax in enumerate(axes.flat): 
 
-        if i == 10:
+        if i == 10 and class_label is None:
             img = next(img for img, label in data if int(label[0]) == 0)
             img = img.numpy().transpose((1, 2, 0))
             ax.imshow(img, cmap='gray')
@@ -44,66 +52,29 @@ def plot_images(data):
             ax.axis('off')
             continue
 
-        if i == 11:
+        if i == 11 and class_label is None:
             ax.axis('off')
             continue
         
-        img, bbox = next((img, label[1:5]) for img, label in data if int(label[-1]) == i)
-        img_height, img_width = img.shape[-2], img.shape[-1]
+        if class_label is None:
+            img, label = next((img, label) for img, label in data if int(label[-1]) == i)
+            ax.set_title(i)
+        
+        else:
+            img, label = class_images[start_idx+i], class_labels[start_idx+i]
+            plt.suptitle(f'Class {class_label} - Image {start_idx} - {start_idx+i}')
 
+        img_height, img_width = img.shape[-2], img.shape[-1]
         img = img.clone()
         img = (img * 255).byte()
 
-        bbox = bbox.clone()
-        bbox[0] *= img_width
-        bbox[1] *= img_height
-        bbox[2] *= img_width
-        bbox[3] *= img_height
+        converted_bbox = _convert_box(label, img_width, img_height)
 
-        bbox = bbox.type(torch.uint8)
-
-        converted_bbox = box_convert(bbox, in_fmt='cxcywh', out_fmt='xyxy')
-
-        img_with_bbox = draw_bounding_boxes(img, converted_bbox.unsqueeze(0), colors='lightgreen')
+        img_with_bbox = draw_bounding_boxes(img, converted_bbox, colors='lightgreen')
         img_with_bbox  = img_with_bbox.numpy().transpose((1, 2, 0))
         ax.imshow(img_with_bbox, cmap='gray')
-        ax.set_title(i)
         ax.axis('off')
 
-def plot_class(data:torch.tensor, class_label:int, start_idx:int=0) -> None:
-    """Plots a subplot with 10 images from a given class, starting at a chosen index"""
-    class_images = [img for img, label in data if int(label[-1]) == class_label]
-    bboxes = [label[1:5] for img, label in data if int(label[-1]) == class_label]
-    _, axes = plt.subplots(nrows=2, ncols=5, figsize=(8,3))
-
-    for i, ax in enumerate(axes.flat):
-        
-
-
-        idx = start_idx + i
-        img = class_images[idx].clone()
-        bbox = bboxes[idx].clone()
-
-        img_height, img_width = data[0][0].shape[-2], data[0][0].shape[-1]
-
-        img = (img * 255).byte()
-
-        bbox[0] *= img_width
-        bbox[1] *= img_height
-        bbox[2] *= img_width
-        bbox[3] *= img_height
-
-        bbox = bbox.type(torch.uint8)
-
-        converted_bbox = box_convert(bbox, in_fmt='cxcywh', out_fmt='xyxy')
-
-        img_with_bbox = draw_bounding_boxes(img, converted_bbox.unsqueeze(0), colors='lightgreen')
-        img_with_bbox  = img_with_bbox.numpy().transpose((1, 2, 0))
-        ax.imshow(img_with_bbox, cmap='gray')
-        plt.suptitle(f'CLASS {class_label} - Image {start_idx} to {idx}')
-        ax.axis('off')
-
-    plt.show()
 
 def fc_size(size, layers):
     input_size = size
@@ -150,7 +121,8 @@ def int_to_pair(n):
     else:
         raise ValueError("Please give an int or a pair of int")
     
-def compute_performance(model, loader):
+
+def localization_performance(model, loader):
     '''
     Function that uses a model to predict and calculate accuracy
     '''
@@ -194,7 +166,7 @@ def compute_performance(model, loader):
 
     performance = (acc + iou) / 2
     
-    return acc, iou, performance
+    return [acc, iou, performance]
 
 def plot_loss(train_loss:list, val_loss:list, title:str, save_dir='test_results/', save_model=False) -> None:
     """Plots the training and validation loss"""
@@ -225,7 +197,9 @@ def plot_lists(data, loss_names:list, title:str, save_dir='test_results/', save_
         
     plt.show()
     
-def train(n_epochs, optimizer, model, loss_fn, train_loader, val_loader, performance):
+def train(n_epochs, optimizer, model, loss_fn, train_loader, val_loader, performance_calculator):
+    """Performance calculator should be a function to compute performance. The performance should be returned from the function in a list
+    with the main metric as pos -1. """
     
     n_batch_train = len(train_loader)
     n_batch_val = len(val_loader)
@@ -303,10 +277,10 @@ def train(n_epochs, optimizer, model, loss_fn, train_loader, val_loader, perform
     
 #finally:
     
-    train_acc, train_iou, train_performance = performance(model, train_loader)
-    val_acc, val_iou, val_performance = performance(model, val_loader)
-    print(f'Training performance: Accuracy = {train_acc}, IOU = {train_iou}, Overall = {train_performance}')
-    print(f'Validation performance: Accuracy = {val_acc}, IOU = {val_iou}, Overall = {val_performance}')
+    train_performance = performance_calculator(model, train_loader)
+    val_performance = performance_calculator(model, val_loader)
+    print(f'Training performance: {train_performance}')
+    print(f'Validation performance:{val_performance}')
 
     return losses_train, losses_val, train_performance, val_performance, losses_separated
     
@@ -354,9 +328,6 @@ def plot_predictions(dataset, y_true:torch.tensor, y_pred:torch.tensor, label:in
     class_imgs = [img for idx, img in enumerate(imgs) if class_mask[idx]]
     class_true, class_pred = y_true[class_mask], y_pred[class_mask]
     
-    true_bboxes = [label[1:5] for label in class_true]
-    pred_bboxes = [label[1:5] for label in class_pred]
-
     _, axes = plt.subplots(nrows=2, ncols=5, figsize=(8,3))
 
     for i, ax in enumerate(axes.flat):
@@ -368,41 +339,21 @@ def plot_predictions(dataset, y_true:torch.tensor, y_pred:torch.tensor, label:in
         img = (img * 255).byte()
 
         if int(class_true[idx][0]) == 1:
-            true_bbox = true_bboxes[idx].clone() # TODO repetiv kode, lage en funksjon
-            true_bbox[0] *= img_width
-            true_bbox[1] *= img_height
-            true_bbox[2] *= img_width
-            true_bbox[3] *= img_height
-            
-            true_bbox = true_bbox.type(torch.uint8)
-            true_bbox_converted = box_convert(true_bbox, in_fmt='cxcywh', out_fmt='xyxy')
-            true_bbox_converted = true_bbox_converted.unsqueeze(0)
-
+            true_bbox_converted = _convert_box(class_true[idx], img_width, img_height)
             img = draw_bounding_boxes(img, true_bbox_converted, colors='lightgreen')
 
         if F.sigmoid(class_pred[idx][0]) > 0.5:
-            pred_bbox = pred_bboxes[idx].clone()
-            pred_bbox[0] *= img_width
-            pred_bbox[1] *= img_height
-            pred_bbox[2] *= img_width
-            pred_bbox[3] *= img_height
-            
-            pred_bbox = pred_bbox.type(torch.uint8)
-            pred_bbox_converted = box_convert(pred_bbox, in_fmt='cxcywh', out_fmt='xyxy')
-            pred_bbox_converted = pred_bbox_converted.unsqueeze(0)
-
+            pred_bbox_converted = _convert_box(class_pred[idx], img_width, img_height)
             img = draw_bounding_boxes(img, pred_bbox_converted, colors='red')
             
         img = img.numpy().transpose((1, 2, 0))
         ax.imshow(img, cmap='gray')
         ax.set_title(f'Pred: {int(class_pred[idx][-1])}')
-        plt.suptitle(f'True label: {label} - Image {start_idx} to {idx}')
+        plt.suptitle(f'True label: {label} - Image {start_idx} - {idx}')
         ax.axis('off')
         
     if save_model:
         plt.savefig(save_dir+fig_name+'_bbox_pred', bbox_inches='tight')
-        
-    plt.show()
 
 
 def global_to_local(labels_list:list, grid_dimension:tuple):
@@ -442,7 +393,6 @@ def prepare_labels(label_dataset:list, grid_dimension:tuple):
     '''
     Iterates through each listed tensor, transforms from global to local coordinates, and stacks them into a new tensor.
     '''
-
     new_tensor = torch.stack([global_to_local(label, grid_dimension) for label in label_dataset])
     new_tensor = new_tensor.permute(0, 3, 1, 2) 
 
@@ -485,20 +435,21 @@ def plot_detection_data(imgs, y_true, y_pred=None, start_idx=0):
         img_height, img_width = img.shape[-2], img.shape[-1]
         img = img.clone()
         img = (img * 255).byte()
-        labels = [labels] if not isinstance(labels, list) else labels
+        y_true_label = [y_true_label] if not isinstance(y_true_label, list) else y_true_label
         label_classes = ''
         
         for label in y_true_label:
-            label_classes += f'True: {int(label[-1])} '
-            converted_bbox = convert_box(label, img_width, img_height)
-            img = draw_bounding_boxes(img, converted_bbox.unsqueeze(0), colors='lightgreen')
+            label_classes += f'T: {int(label[-1])} '
+            converted_bbox = _convert_box(label, img_width, img_height)
+            img = draw_bounding_boxes(img, converted_bbox, colors='lightgreen')
 
         if y_pred is not None:
             y_pred_label = y_pred[i+start_idx]
+            y_pred_label = [y_pred_label] if not isinstance(y_pred_label, list) else y_pred_label
             for label in y_pred_label:
                 label_classes += f'True: {int(label[-1])} '
-                converted_bbox = convert_box(label, img_width, img_height)
-                img = draw_bounding_boxes(img, converted_bbox.unsqueeze(0), colors='red')
+                converted_bbox = _convert_box(label, img_width, img_height)
+                img = draw_bounding_boxes(img, converted_bbox, colors='red')
 
 
         img  = img.numpy().transpose((1, 2, 0))
@@ -508,7 +459,9 @@ def plot_detection_data(imgs, y_true, y_pred=None, start_idx=0):
         plt.suptitle(f'Image {start_idx} - {start_idx+9}')
 
 
-def convert_box(label, w, h):
+def _convert_box(label, w, h):
+    """Used to slice out the bbox from a label. Scales the bbox according to image width and image heigth.
+    Uses pytorch's function box_convert to change format of tensor"""
     bbox = label[1:5]
     bbox = bbox.clone()
     bbox[0] *= w
@@ -519,4 +472,5 @@ def convert_box(label, w, h):
     bbox = bbox.type(torch.uint8)
 
     converted_bbox = box_convert(bbox, in_fmt='cxcywh', out_fmt='xyxy')
+    converted_bbox = converted_bbox.unsqueeze(0)
     return converted_bbox
