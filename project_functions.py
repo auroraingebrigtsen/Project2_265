@@ -225,7 +225,7 @@ def plot_lists(data, loss_names:list, title:str, save_dir='test_results/', save_
         
     plt.show()
     
-def train(n_epochs, optimizer, model, loss_fn, train_loader, val_loader):
+def train(n_epochs, optimizer, model, loss_fn, train_loader, val_loader, performance):
     
     n_batch_train = len(train_loader)
     n_batch_val = len(val_loader)
@@ -279,7 +279,7 @@ def train(n_epochs, optimizer, model, loss_fn, train_loader, val_loader):
 
                 outputs = model(imgs)
 
-                loss, _ = loss_fn(outputs, labels)
+                loss,_ = loss_fn(outputs, labels)
                 loss_val += loss.item()
             
         losses_train.append(loss_train / n_batch_train)
@@ -303,8 +303,8 @@ def train(n_epochs, optimizer, model, loss_fn, train_loader, val_loader):
     
 #finally:
     
-    train_acc, train_iou, train_performance = compute_performance(model, train_loader)
-    val_acc, val_iou, val_performance = compute_performance(model, val_loader)
+    train_acc, train_iou, train_performance = performance(model, train_loader)
+    val_acc, val_iou, val_performance = performance(model, val_loader)
     print(f'Training performance: Accuracy = {train_acc}, IOU = {train_iou}, Overall = {train_performance}')
     print(f'Validation performance: Accuracy = {val_acc}, IOU = {val_iou}, Overall = {val_performance}')
 
@@ -444,7 +444,7 @@ def prepare_labels(label_dataset:list, grid_dimension:tuple):
     '''
 
     new_tensor = torch.stack([global_to_local(label, grid_dimension) for label in label_dataset])
-    #new_tensor = new_tensor.permute(0, 3, 1, 2) 
+    new_tensor = new_tensor.permute(0, 3, 1, 2) 
 
     return new_tensor
 
@@ -475,36 +475,48 @@ def local_to_global(labels_tensor:torch.Tensor, grid_dimension:tuple):
     return list_of_tensors
 
 
-def plot_detection_data(imgs, global_labels, start_idx=0):
+def plot_detection_data(imgs, y_true, y_pred=None, start_idx=0):
     """Data should be global"""
     _, axes = plt.subplots(nrows=2, ncols=5, figsize=(8,3))
 
     for i, ax in enumerate(axes.flat): 
         
-        img, labels = imgs[i+start_idx], global_labels[i+start_idx]
+        img, y_true_label = imgs[i+start_idx], y_true[i+start_idx]
         img_height, img_width = img.shape[-2], img.shape[-1]
         img = img.clone()
         img = (img * 255).byte()
         labels = [labels] if not isinstance(labels, list) else labels
         label_classes = ''
         
-        for label in labels:
-            label_classes += f'{int(label[-1])}  '
-            bbox = label[1:5]
-            bbox = bbox.clone()
-            bbox[0] *= img_width
-            bbox[1] *= img_height
-            bbox[2] *= img_width
-            bbox[3] *= img_height
-
-            bbox = bbox.type(torch.uint8)
-
-            converted_bbox = box_convert(bbox, in_fmt='cxcywh', out_fmt='xyxy')
-
+        for label in y_true_label:
+            label_classes += f'True: {int(label[-1])} '
+            converted_bbox = convert_box(label, img_width, img_height)
             img = draw_bounding_boxes(img, converted_bbox.unsqueeze(0), colors='lightgreen')
+
+        if y_pred is not None:
+            y_pred_label = y_pred[i+start_idx]
+            for label in y_pred_label:
+                label_classes += f'True: {int(label[-1])} '
+                converted_bbox = convert_box(label, img_width, img_height)
+                img = draw_bounding_boxes(img, converted_bbox.unsqueeze(0), colors='red')
+
 
         img  = img.numpy().transpose((1, 2, 0))
         ax.imshow(img, cmap='gray')
         ax.set_title(label_classes)
         ax.axis('off')
         plt.suptitle(f'Image {start_idx} - {start_idx+9}')
+
+
+def convert_box(label, w, h):
+    bbox = label[1:5]
+    bbox = bbox.clone()
+    bbox[0] *= w
+    bbox[1] *= h
+    bbox[2] *= w
+    bbox[3] *= h
+
+    bbox = bbox.type(torch.uint8)
+
+    converted_bbox = box_convert(bbox, in_fmt='cxcywh', out_fmt='xyxy')
+    return converted_bbox
