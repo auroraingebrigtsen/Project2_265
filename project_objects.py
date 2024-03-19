@@ -68,6 +68,9 @@ class LocalizationLoss(nn.Module):
         L_a = self.L_a(det_pred, det_true)
 
         object_detected = det_true == 1
+        binary_classification = len(class_pred.shape) > 1
+
+        L_c = self.L_c_binary if binary_classification else self.L_c
 
         L_b = self.L_b(bbox_pred[object_detected], bbox_true[object_detected])
 
