@@ -444,10 +444,11 @@ def plot_detection_data(imgs, y_true, y_pred=None, start_idx=0):
             img = draw_bounding_boxes(img, converted_bbox, colors='lightgreen')
 
         if y_pred is not None:
+            label_classes += f'\n'
             y_pred_label = y_pred[i+start_idx]
             y_pred_label = [y_pred_label] if not isinstance(y_pred_label, list) else y_pred_label
             for label in y_pred_label:
-                label_classes += f'True: {int(label[-1])} '
+                label_classes += f'P: {int(label[-1])} '
                 converted_bbox = _convert_box(label, img_width, img_height)
                 img = draw_bounding_boxes(img, converted_bbox, colors='red')
 
