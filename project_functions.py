@@ -150,16 +150,7 @@ def localization_performance(model, loader):
             correct += ((object_detected == 0) & (det_true == 0)).sum()
             correct += ((object_detected == 1) & (det_true == 1) & (class_pred == class_true)).sum()
 
-            bbox_pred = outputs[:, 1:5]
-            bbox_true = labels[:, 1:5]
-
-            converted_bbox_pred = box_convert(bbox_pred[object_detected], in_fmt='cxcywh', out_fmt='xyxy')
-            converted_bbox_true = box_convert(bbox_true[object_detected], in_fmt='cxcywh', out_fmt='xyxy')
-            
-            bbox_iou = box_iou(converted_bbox_pred,converted_bbox_true)
-            mean_iou = bbox_iou.diag().sum()
-            
-            iou_sum += mean_iou.item()
+            iou_sum += calculate_iou(outputs, labels).sum().item()
             
     acc =  correct / total
     iou = iou_sum / total
@@ -405,24 +396,6 @@ def merge_datasets(d1, d2):
 
     return TensorDataset(d1[:][0],d2[:])
 
-def local_to_global(labels_tensor:torch.Tensor, grid_dimension:tuple):
-    '''
-    Returns to original format.
-    '''
-
-    list_of_tensors = []
-
-
-    for i in range(len(labels_tensor)):
-        inner =[]
-        x = labels_tensor[i,:,:]
-        not_all_zero = x.any(dim=-1)
-        for each in x[not_all_zero]:
-            inner.append(each)
-        if inner != []:
-            list_of_tensors.append(inner)
-
-    return list_of_tensors
 
 
 def plot_detection_data(imgs, y_true, y_pred=None, start_idx=0):
@@ -475,3 +448,129 @@ def _convert_box(label, w, h):
     converted_bbox = box_convert(bbox, in_fmt='cxcywh', out_fmt='xyxy')
     converted_bbox = converted_bbox.unsqueeze(0)
     return converted_bbox
+
+
+def calculate_ap(outputs, labels):
+    """
+    Calculates average presicion
+    """
+    treshold = 0.5
+    outputs_reshaped = outputs.reshape(-1, outputs.size(-1))
+    labels_reshaped = labels.reshape(-1, labels.size(-1))
+
+
+    confidence = F.sigmoid(outputs_reshaped[:, 0])
+    iou = calculate_iou(outputs_reshaped, labels_reshaped)
+    tp = torch.where(iou >= treshold, 1, 0)
+    fp = torch.where(iou < treshold, 1, 0)
+
+    _, indices = torch.sort(confidence, dim = 0, descending=True) 
+    ground_truths = (labels_reshaped[:,0] == 1).sum().item()
+
+    tensor_length = len(indices)
+
+    recall = torch.zeros(tensor_length)
+    precision = torch.zeros(tensor_length)
+    acc_tp = torch.zeros(tensor_length)
+    acc_fp = torch.zeros(tensor_length)
+
+    counter = 0
+
+    for i in indices:
+        if counter == 0:
+            acc_tp[counter] = tp[i]
+            acc_fp[counter] = fp[i]
+
+        else:
+            acc_tp[counter] = tp[i]+acc_tp[counter-1]
+            acc_fp[counter] = fp[i]+acc_fp[counter-1]
+
+        precision[counter] = acc_tp[counter]/(acc_tp[counter]+acc_fp[counter])
+
+        recall[counter] = acc_tp[counter]/ground_truths
+
+        counter += 1
+        
+    interpolated_sum = 0
+
+    recall_levels = torch.arange(0, 1.1, 0.1)
+
+    for recall_level in recall_levels:
+        mask = recall < recall_level
+        if torch.any(mask):
+            interpolated_sum += torch.max(precision[mask])
+
+    return interpolated_sum / len(recall_levels)
+
+def detection_performance(model, loader):
+    '''
+    Description
+    '''
+    model.eval()
+    ap_sum = 0
+    total = 0
+    with torch.inference_mode():
+        for imgs, labels in loader:
+            imgs = imgs.to(device=device, dtype=torch.double)
+            labels = labels.to(device=device, dtype=torch.double)
+
+            outputs = model(imgs)
+
+            ap_sum += calculate_ap(outputs.permute(0,2,3,1), labels.permute(0,2,3,1))
+            total += 1
+
+    return ap_sum/total
+
+
+def calculate_iou(outputs, labels):
+    """
+    Calculate IoU between ground truth and predicted boxes.
+    """
+
+    bbox_pred = outputs[:, 1:5]
+    bbox_true = labels[:, 1:5]
+
+    converted_bbox_pred = box_convert(bbox_pred, in_fmt='cxcywh', out_fmt='xyxy')
+    converted_bbox_true = box_convert(bbox_true, in_fmt='cxcywh', out_fmt='xyxy')
+
+    bbox_iou = box_iou(converted_bbox_pred,converted_bbox_true)
+    
+    iou = bbox_iou.diag()
+    
+    return iou
+
+def local_to_global_list(input_tensor):
+
+    input_tensor = input_tensor.clone()
+
+    returned_list = []
+
+    h_size = input_tensor.shape[1]
+    w_size = input_tensor.shape[2]
+
+    for h in range(h_size):
+
+
+        for w in range(w_size):
+
+            input_tensor[:,h,w,1] /=3
+            input_tensor[:,h,w,2] /=2
+
+            input_tensor[:,h,w,1] += (w*1)/w_size
+            input_tensor[:,h,w,2] += (h*1)/h_size
+
+            input_tensor[:,h,w,3] *=3
+            input_tensor[:,h,w,4] *=2
+
+    new_tensor = input_tensor.view(-1, input_tensor.size(-1), input_tensor.size(-1))
+    mask = new_tensor[:, :, 0] != 0
+    filtered_tensors = [new_tensor[i][mask[i]] for i in range(new_tensor.size(0))]
+
+    for each in filtered_tensors:
+        inner = []
+        for i in each:
+            inner.append(i)
+        returned_list.append(inner)
+
+    return returned_list
+
