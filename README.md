@@ -13,8 +13,9 @@ and performance metrics (Mean of IOU and Accuracy for object localization and mA
 A basic PyTorch environment is needed.
 Dependencies can be installed using requirements.txt.
 
-File structure: 
+**File structure**: 
 
+```
 ├── data  
 │   ├── detection_test.pt
 │   ├── detection_train.pt
@@ -33,7 +34,7 @@ File structure:
 ├── project2_models.py
 ├── requirements.txt
 └── report.md
-
+```
 ## Contact
 
 - ain015@uib.no
