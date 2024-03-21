@@ -433,7 +433,8 @@ def plot_detection_data(imgs, y_true, y_pred=None, start_idx=0):
         ax.imshow(img, cmap='gray')
         ax.set_title(label_classes)
         ax.axis('off')
-        plt.suptitle(f'Image {start_idx} - {start_idx+9}')
+
+
 
 
 def _convert_box(label, w, h):
