@@ -1,2 +1,31 @@
-Training performance: [tensor(0.9306, device='cuda:0'), 0.2575426343877788, tensor(0.5941, device='cuda:0')]
-Validation performance:[tensor(0.8830, device='cuda:0'), 0.24959476476023917, tensor(0.5663, device='cuda:0')]
+SGD
+
+n_epochs = 5, batch_size = 64, lr = 0.01, momentum = 0.9, decay= 0.001, optim = sgd
+Training performance: [0.9306, 0.2575426343877788, 0.5941]
+Validation performance:[0.8830, 0.24959476476023917, 0.5663]
+
+n_epochs = 5, batch_size = 64, lr = 0.01, momentum = 0, decay= 0, optim = sgd
+Training performance: [0.39124579124579123, 0.36397979234433964, 0.37761279179506546]
+Validation performance:[0.38712121212121214, 0.35968464944500483, 0.3734029307831085]
+
+n_epochs = 5, batch_size = 256, lr = 0.01, momentum = 0.9, decay= 0.001, optim = sgd
+Training performance: [0.7761111111111111, 0.40942442915119814, 0.5927677701311547]
+Validation performance:[0.7571212121212121, 0.4022115302577982, 0.5796663711895051]
+
+n_epochs = 20, batch_size = 64, lr = 0.01, momentum = 0.9, decay= 0.001, optim = sgd
+Training performance: [0.9918013468013467, 0.10164555549826132, 0.546723451149804]
+Validation performance:[0.91, 0.10043463671500324, 0.5052173183575016]
+
+ADAM
+
+n_epochs = 5, batch_size = 64, lr = 0.01, optim = Adam
+Training performance: [0.10227272659540176, 0.11688116572612416, 0.10957694798707962]
+Validation performance:[0.10106060653924942, 0.11918815300950636, 0.1101243793964386]
+
+n_epochs = 5, batch_size = 256, lr = 0.01, optim = Adam
+Training performance: [0.09501682966947556, 0.10704091271977471, 0.10102887451648712]
+Validation performance:[0.09409090876579285, 0.10999161307182936, 0.10204125940799713]
+
+n_epochs = 20, batch_size = 64, lr = 0.01, optim = Adam
+Training performance: [0.10227272659540176, 0.11960634825272236, 0.11093953251838684]
+Validation performance:[0.10106060653924942, 0.12178123990091706, 0.11142092198133469]

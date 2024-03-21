@@ -1,2 +1,5 @@
-Training performance: [tensor(0.9242, device='cuda:0'), 0.450063287543454, tensor(0.6871, device='cuda:0')]
-Validation performance:[tensor(0.8847, device='cuda:0'), 0.44652688964407844, tensor(0.6656, device='cuda:0')]
+SGD
+
+n_epochs = 5, batch_size = 64, lr = 0.01, momentum = 0.9, decay= 0.001, optim = sgd
+Training performance: [0.9242, 0.450063287543454, 0.6871]
+Validation performance:[0.8847, 0.44652688964407844, 0.6656]
