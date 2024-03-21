@@ -33,47 +33,75 @@ def count_instances(data, data_name=None) -> None:
         print(f'{key}: {value}') 
 
 
-def plot_localization_data(data, class_label:int=None, start_idx:int=0) -> None:
+def plot_localization_data(imgs, y_true, y_preds=None, class_label:int=None, start_idx:int=0, save_dir='test_results/', fig_name='new', save_model=False) -> None:
     """If class_label is None, plots the first image of each class in the dataset.
     If class_label is spesificed, plots a subplot with 10 images from a given class, starting at a chosen index"""
-    _, axes = plt.subplots(nrows=2, ncols=6, figsize=(8,3))
+    
+    plot_predictions = y_preds is not None
+    class_specified = class_label is not None
 
-    if class_label is not None:
-        class_images = [img for img, label in data if int(label[-1]) == class_label]
-        class_labels = [label for _, label in data if int(label[-1]) == class_label]
+    if class_specified:
+        class_mask = (y_true[:, -1] == class_label) & (y_true[:, 0] == 1)
+        class_imgs = imgs=imgs[class_mask]
+        class_labels = y_true[class_mask]
+
+        if plot_predictions:
+            class_preds =  y_preds[class_mask]
+
+    _, axes = plt.subplots(nrows=2, ncols=6, figsize=(8,3))
 
     for i, ax in enumerate(axes.flat): 
 
-        if i == 10 and class_label is None:
-            img = next(img for img, label in data if int(label[0]) == 0)
+        if i == 10 and not class_specified and not plot_predictions:  # plot an image of empty img as well
+            img = next(img for img, label in zip(imgs, y_true) if int(label[0]) == 0)
             img = img.numpy().transpose((1, 2, 0))
             ax.imshow(img, cmap='gray')
             ax.set_title('None')
             ax.axis('off')
             continue
 
-        if i == 11 and class_label is None:
+        elif i == 11 and not class_specified and not plot_predictions:  # no more classes to plot
             ax.axis('off')
             continue
         
-        if class_label is None:
-            img, label = next((img, label) for img, label in data if int(label[-1]) == i)
+        elif not class_specified and not plot_predictions:  # plot one image of each class
+            next_index = next((index for index, label in enumerate(y_true) if int(label[-1]) == i), None)
+            img = imgs[next_index]
+            label = y_true[next_index]
             ax.set_title(i)
         
+        elif not class_specified and plot_predictions:  # plot 10 first prediction from start_idx
+            img, label, y_pred =  imgs[start_idx+i], y_true[start_idx+i], y_preds[start_idx+i]
+            ax.set_title(f'T:{int(label[-1]) if label[0] == 1 else None} P:{int(y_pred[-1]) if y_pred[0] > 0.5 else None}')
+
         else:
-            img, label = class_images[start_idx+i], class_labels[start_idx+i]
+            img, label = class_imgs[start_idx+i], class_labels[start_idx+i]  # plot 10 first imgs from the given class, from start_idx
             plt.suptitle(f'Class {class_label} - Image {start_idx} - {start_idx+i}')
 
+            if plot_predictions: # and also the prediction
+                y_pred = class_preds[start_idx+i]
+                ax.set_title(f'P:{int(y_pred[-1]) if y_pred[0] > 0.5 else None}')
+
         img_height, img_width = img.shape[-2], img.shape[-1]
+        
         img = img.clone()
         img = (img * 255).byte()
 
-        converted_bbox = _convert_box(label, img_width, img_height)
+        if label[0] == 1:  # plot true bounding box
+            converted_bbox = _convert_box(label, img_width, img_height)
+            img = draw_bounding_boxes(img, converted_bbox, colors='lightgreen')
 
-        img_with_bbox = draw_bounding_boxes(img, converted_bbox, colors='lightgreen')
-        img_with_bbox  = img_with_bbox.numpy().transpose((1, 2, 0))
-        ax.imshow(img_with_bbox, cmap='gray')
+        if plot_predictions:  # plot predicted bounding box
+            if F.sigmoid(y_pred[0]) > 0.5:
+                pred_bbox_converted = _convert_box(y_pred, img_width, img_height)
+                img = draw_bounding_boxes(img, pred_bbox_converted, colors='red')
+
+        img  = img.numpy().transpose((1, 2, 0))
+        ax.imshow(img, cmap='gray')
         ax.axis('off')
+        
+    if save_model:
+        plt.savefig(save_dir+fig_name+'_bbox_pred', bbox_inches='tight')
 
 
 def fc_size(size, layers):
@@ -107,6 +135,7 @@ def get_output_size(input_size:tuple, layer:nn.Module):
         channels = layer.out_channels
 
     return (width_out, height_out, channels)
+
 
 def int_to_pair(n):
     """
@@ -159,6 +188,7 @@ def localization_performance(model, loader):
     
     return [acc.item(), iou, performance.item()]
 
+
 def plot_loss(train_loss:list, val_loss:list, title:str, save_dir='test_results/', save_model=False) -> None:
     """Plots the training and validation loss"""
     _, ax = plt.subplots()
@@ -174,6 +204,7 @@ def plot_loss(train_loss:list, val_loss:list, title:str, save_dir='test_results/
         
     plt.show()
 
+
 def plot_lists(data, loss_names:list, title:str, save_dir='test_results/', save_model=False):
     transposed_data = list(map(list, zip(*data)))
     for i, column in enumerate(transposed_data):
@@ -188,6 +219,7 @@ def plot_lists(data, loss_names:list, title:str, save_dir='test_results/', save_
         
     plt.show()
     
+
 def train(n_epochs, optimizer, model, loss_fn, train_loader, val_loader, performance_calculator):
     """
     Performance calculator should be a function to compute performance. The performance should be returned from the function in a list
@@ -269,6 +301,7 @@ def train(n_epochs, optimizer, model, loss_fn, train_loader, val_loader, perform
 
     return losses_train, losses_val, train_performance, val_performance, losses_separated
     
+
 def model_selector(models:list, performances:list):
     """Given a list of models, returns the model that has best accuracy score on validation data"""
     best_model = None
@@ -280,6 +313,7 @@ def model_selector(models:list, performances:list):
             best_performance = performances[idx]
 
     return best_model, best_performance
+
 
 def predict(model, loader, binary_class = False):
     '''
@@ -310,40 +344,6 @@ def predict(model, loader, binary_class = False):
             y_pred = torch.cat((y_pred, predicted.data), dim=0)
                 
     return y_true, y_pred
-
-def plot_predictions(dataset, y_true:torch.tensor, y_pred:torch.tensor, label:int=0, start_idx:int=0, save_dir='test_results/', fig_name='new', save_model=False) -> None:
-    """Plots things"""
-    imgs = [img for img,_ in dataset]
-    class_mask = y_true[:, -1] == label
-    class_imgs = [img for idx, img in enumerate(imgs) if class_mask[idx]]
-    class_true, class_pred = y_true[class_mask], y_pred[class_mask]
-    
-    _, axes = plt.subplots(nrows=2, ncols=5, figsize=(8,3))
-
-    for i, ax in enumerate(axes.flat):
-
-        idx = start_idx + i
-        img = class_imgs[idx].clone()
-
-        img_height, img_width = img.shape[-2], img.shape[-1]
-        img = (img * 255).byte()
-
-        if int(class_true[idx][0]) == 1:
-            true_bbox_converted = _convert_box(class_true[idx], img_width, img_height)
-            img = draw_bounding_boxes(img, true_bbox_converted, colors='lightgreen')
-
-        if F.sigmoid(class_pred[idx][0]) > 0.5:
-            pred_bbox_converted = _convert_box(class_pred[idx], img_width, img_height)
-            img = draw_bounding_boxes(img, pred_bbox_converted, colors='red')
-            
-        img = img.numpy().transpose((1, 2, 0))
-        ax.imshow(img, cmap='gray')
-        ax.set_title(f'Pred: {int(class_pred[idx][-1])}')
-        plt.suptitle(f'True label: {label} - Image {start_idx} - {idx}')
-        ax.axis('off')
-        
-    if save_model:
-        plt.savefig(save_dir+fig_name+'_bbox_pred', bbox_inches='tight')
 
 
 def global_to_local(labels_list:list, grid_dimension:tuple):
@@ -397,7 +397,7 @@ def merge_datasets(d1, d2):
 
 
 
-def plot_detection_data(imgs, y_true, y_pred=None, start_idx=0):
+def plot_detection_data(imgs, y_true, y_pred=None, start_idx=0, save_dir='test_results/', fig_name='new', save_model=False):
     """
     Data should be global
     """
@@ -434,7 +434,8 @@ def plot_detection_data(imgs, y_true, y_pred=None, start_idx=0):
         ax.set_title(label_classes)
         ax.axis('off')
 
-
+    if save_model:
+        plt.savefig(save_dir+fig_name+'_bbox_pred', bbox_inches='tight')
 
 
 def _convert_box(label, w, h):
@@ -454,6 +455,7 @@ def _convert_box(label, w, h):
     converted_bbox = box_convert(bbox, in_fmt='cxcywh', out_fmt='xyxy')
     converted_bbox = converted_bbox.unsqueeze(0)
     return converted_bbox
+
 
 def calculate_ap(outputs_reshaped, labels_reshaped):
     """
@@ -504,6 +506,7 @@ def calculate_ap(outputs_reshaped, labels_reshaped):
 
     return interpolated_sum / len(recall_levels)
 
+
 def detection_performance(model, loader):
     '''
     A function to calculate the performance measure.
@@ -539,6 +542,7 @@ def detection_performance(model, loader):
             total += 1
             
     return [map_sum/total]
+
 
 def calculate_iou(outputs, labels):
     """
@@ -592,6 +596,7 @@ def local_to_global_list(input_tensor):
         returned_list.append(inner)
 
     return returned_list
+
 
 def normalizer(source_dataset, val_dataset, test_dataset):
     '''
