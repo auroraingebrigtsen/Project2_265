@@ -287,7 +287,7 @@ def model_selector(models:list, performances:list):
 
     return best_model, best_performance
 
-def predict(model, loader):
+def predict(model, loader, binary_class=False):
     '''
     Function that creates a y and y_pred tensor given a model and a loader
     '''
@@ -303,7 +303,11 @@ def predict(model, loader):
             labels = labels.to(device=device)
             outputs = model(imgs)
             
-            _, class_pred = torch.max(outputs[:, 5:], dim=1)
+            if binary_class:
+                class_pred = torch.sigmoid(outputs[:, 5:])
+                class_pred = torch.where(class_pred>0.5, 1, 0)
+            else: 
+                _, class_pred = torch.max(outputs[:, 5:], dim=1)
 
             predicted = torch.cat((outputs[:, :5], class_pred.unsqueeze(1)), dim=1)
             
@@ -430,7 +434,8 @@ def plot_detection_data(imgs, y_true, y_pred=None, start_idx=0):
         ax.imshow(img, cmap='gray')
         ax.set_title(label_classes)
         ax.axis('off')
-        plt.suptitle(f'Image {start_idx} - {start_idx+9}')
+
+
 
 
 def _convert_box(label, w, h):
