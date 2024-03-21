@@ -150,7 +150,7 @@ def localization_performance(model, loader):
             correct += ((object_detected == 0) & (det_true == 0)).sum()
             correct += ((object_detected == 1) & (det_true == 1) & (class_pred == class_true)).sum()
 
-            iou_sum += calculate_iou(outputs, labels).sum().item()
+            iou_sum += calculate_iou(outputs[object_detected], labels[object_detected]).sum().item()
             
     acc =  correct / total
     iou = iou_sum / total
@@ -202,8 +202,6 @@ def train(n_epochs, optimizer, model, loss_fn, train_loader, val_loader, perform
     time_spent = 0
 
     optimizer.zero_grad(set_to_none=True)
-    
-    #try:
         
     for epoch in range(1, n_epochs + 1):
         
@@ -261,12 +259,6 @@ def train(n_epochs, optimizer, model, loss_fn, train_loader, val_loader, perform
         #print('{}  |  Epoch {}  |  loss {}'.format(datetime.now().strftime('%H:%M:%S'), epoch, losses_separated[epoch - 1]))
 
         print(f"Estimated time left: {floor(time_left/60)}m {round(time_left%60)}s")
-        
-#except Exception as e:
-    
-    #print(e)
-    
-#finally:
     
     train_performance = performance_calculator(model, train_loader)
     val_performance = performance_calculator(model, val_loader)
@@ -399,7 +391,9 @@ def merge_datasets(d1, d2):
 
 
 def plot_detection_data(imgs, y_true, y_pred=None, start_idx=0):
-    """Data should be global"""
+    """
+    Data should be global
+    """
     _, axes = plt.subplots(nrows=2, ncols=5, figsize=(8,3))
 
     for i, ax in enumerate(axes.flat): 
@@ -434,8 +428,10 @@ def plot_detection_data(imgs, y_true, y_pred=None, start_idx=0):
 
 
 def _convert_box(label, w, h):
-    """Used to slice out the bbox from a label. Scales the bbox according to image width and image heigth.
-    Uses pytorch's function box_convert to change format of tensor"""
+    """
+    Used to slice out the bbox from a label. Scales the bbox according to image width and image heigth.
+    Uses pytorch's function box_convert to change format of tensor
+    """
     bbox = label[1:5]
     bbox = bbox.clone()
     bbox[0] *= w
@@ -452,7 +448,7 @@ def _convert_box(label, w, h):
 
 def calculate_ap(outputs, labels):
     """
-    Calculates average presicion
+    A function to calculate the average presicion
     """
     treshold = 0.5
     outputs_reshaped = outputs.reshape(-1, outputs.size(-1))
@@ -504,7 +500,8 @@ def calculate_ap(outputs, labels):
 
 def detection_performance(model, loader):
     '''
-    Description
+    A function to calculate the performance measure.
+    This performance uses average precision.
     '''
     model.eval()
     ap_sum = 0
@@ -540,27 +537,30 @@ def calculate_iou(outputs, labels):
     return iou
 
 def local_to_global_list(input_tensor):
+    '''
+    A function that takes a 4D tensor back to the original listed format.
+    '''
 
     input_tensor = input_tensor.clone()
 
     returned_list = []
 
-    h_size = input_tensor.shape[1]
-    w_size = input_tensor.shape[2]
+    h_size = input_tensor.shape[2]
+    w_size = input_tensor.shape[3]
 
     for h in range(h_size):
 
 
         for w in range(w_size):
 
-            input_tensor[:,h,w,1] /=3
-            input_tensor[:,h,w,2] /=2
+            input_tensor[:,1,h,w] /=3
+            input_tensor[:,2,h,w] /=2
 
-            input_tensor[:,h,w,1] += (w*1)/w_size
-            input_tensor[:,h,w,2] += (h*1)/h_size
+            input_tensor[:,1,h,w] += (w*1)/w_size
+            input_tensor[:,2,h,w] += (h*1)/h_size
 
-            input_tensor[:,h,w,3] *=3
-            input_tensor[:,h,w,4] *=2
+            input_tensor[:,3,h,w] /=3
+            input_tensor[:,4,h,w] /=2
 
     new_tensor = input_tensor.view(-1, input_tensor.size(-1), input_tensor.size(-1))
     mask = new_tensor[:, :, 0] != 0
@@ -574,3 +574,26 @@ def local_to_global_list(input_tensor):
 
     return returned_list
 
+def normalizer(source_dataset, val_dataset, test_dataset):
+    '''
+    A function to normalize the data based on mean and standard.
+    Source dataset is the dataset to normalize from.
+    '''
+    imgs = torch.stack([img for img, _ in source_dataset])
+
+    # Define normalizer
+    normalizer_pipe = transforms.Normalize(
+        imgs.mean(dim=(0, 2, 3)), 
+        imgs.std(dim=(0, 2, 3))
+        )
+
+    # Define preprocessor including the normalizer
+    preprocessor = transforms.Compose([
+                normalizer_pipe
+            ])
+    
+    source_dataset_norm = [(preprocessor(img), label) for img, label in source_dataset]
+    val_dataset_norm = [(preprocessor(img), label) for img, label in val_dataset]
+    test_dataset_norm = [(preprocessor(img), label) for img, label in test_dataset]
+    
+    return source_dataset_norm, val_dataset_norm, test_dataset_norm
