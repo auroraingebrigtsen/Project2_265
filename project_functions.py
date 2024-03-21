@@ -157,7 +157,7 @@ def localization_performance(model, loader):
 
     performance = (acc + iou) / 2
     
-    return [acc, iou, performance]
+    return [acc.item(), iou, performance.item()]
 
 def plot_loss(train_loss:list, val_loss:list, title:str, save_dir='test_results/', save_model=False) -> None:
     """Plots the training and validation loss"""
@@ -189,8 +189,10 @@ def plot_lists(data, loss_names:list, title:str, save_dir='test_results/', save_
     plt.show()
     
 def train(n_epochs, optimizer, model, loss_fn, train_loader, val_loader, performance_calculator):
-    """Performance calculator should be a function to compute performance. The performance should be returned from the function in a list
-    with the main metric as pos -1. """
+    """
+    Performance calculator should be a function to compute performance. The performance should be returned from the function in a list
+    with the main metric as pos -1. 
+    """
     
     n_batch_train = len(train_loader)
     n_batch_val = len(val_loader)
@@ -279,11 +281,12 @@ def model_selector(models:list, performances:list):
 
     return best_model, best_performance
 
-def predict(model, loader):
+def predict(model, loader, binary_class = False):
     '''
     Function that creates a y and y_pred tensor given a model and a loader
     '''
     model.eval()
+    
     
     y_true = torch.empty(0, device=device)
     y_pred = torch.empty(0, device=device)
@@ -294,8 +297,12 @@ def predict(model, loader):
             imgs = imgs.to(device=device, dtype=torch.double) 
             labels = labels.to(device=device)
             outputs = model(imgs)
-            
-            _, class_pred = torch.max(outputs[:, 5:], dim=1)
+                        
+            if binary_class:
+                class_pred = torch.sigmoid(outputs[:, -1])
+                class_pred = torch.where(class_pred>0.5, 1, 0)
+            else: 
+                _, class_pred = torch.max(outputs[:, 5:], dim=1)
 
             predicted = torch.cat((outputs[:, :5], class_pred.unsqueeze(1)), dim=1)
             
@@ -406,6 +413,7 @@ def plot_detection_data(imgs, y_true, y_pred=None, start_idx=0):
         label_classes = ''
         
         for label in y_true_label:
+            label = label.clone()
             label_classes += f'T: {int(label[-1])} '
             converted_bbox = _convert_box(label, img_width, img_height)
             img = draw_bounding_boxes(img, converted_bbox, colors='lightgreen')
@@ -415,6 +423,7 @@ def plot_detection_data(imgs, y_true, y_pred=None, start_idx=0):
             y_pred_label = y_pred[i+start_idx]
             y_pred_label = [y_pred_label] if not isinstance(y_pred_label, list) else y_pred_label
             for label in y_pred_label:
+                label = label.clone()
                 label_classes += f'P: {int(label[-1])} '
                 converted_bbox = _convert_box(label, img_width, img_height)
                 img = draw_bounding_boxes(img, converted_bbox, colors='red')
@@ -445,15 +454,11 @@ def _convert_box(label, w, h):
     converted_bbox = converted_bbox.unsqueeze(0)
     return converted_bbox
 
-
-def calculate_ap(outputs, labels):
+def calculate_ap(outputs_reshaped, labels_reshaped):
     """
     A function to calculate the average presicion
     """
     treshold = 0.5
-    outputs_reshaped = outputs.reshape(-1, outputs.size(-1))
-    labels_reshaped = labels.reshape(-1, labels.size(-1))
-
 
     confidence = F.sigmoid(outputs_reshaped[:, 0])
     iou = calculate_iou(outputs_reshaped, labels_reshaped)
@@ -504,7 +509,7 @@ def detection_performance(model, loader):
     This performance uses average precision.
     '''
     model.eval()
-    ap_sum = 0
+    map_sum = 0
     total = 0
     with torch.inference_mode():
         for imgs, labels in loader:
@@ -512,12 +517,27 @@ def detection_performance(model, loader):
             labels = labels.to(device=device, dtype=torch.double)
 
             outputs = model(imgs)
+            
+            y_pred = outputs.permute(0,2,3,1)
+            y_true = labels.permute(0,2,3,1)
+            
+            y_pred_reshaped = y_pred.reshape(-1, y_pred.size(-1))
+            y_true_reshaped = y_true.reshape(-1, y_true.size(-1))
 
-            ap_sum += calculate_ap(outputs.permute(0,2,3,1), labels.permute(0,2,3,1))
+            classes = torch.unique(y_true_reshaped[:,-1])
+            
+            ap_sum = 0
+            
+            for each in classes:
+                mask = y_true_reshaped[:,-1] == each
+
+                ap_sum += calculate_ap(y_pred_reshaped[mask], y_true_reshaped[mask])
+                
+   
+            map_sum += ap_sum/len(classes)
             total += 1
-
-    return ap_sum/total
-
+            
+    return [map_sum/total]
 
 def calculate_iou(outputs, labels):
     """
@@ -537,16 +557,13 @@ def calculate_iou(outputs, labels):
     return iou
 
 def local_to_global_list(input_tensor):
-    '''
-    A function that takes a 4D tensor back to the original listed format.
-    '''
 
     input_tensor = input_tensor.clone()
 
     returned_list = []
 
-    h_size = input_tensor.shape[2]
-    w_size = input_tensor.shape[3]
+    h_size = input_tensor.shape[1]
+    w_size = input_tensor.shape[2]
 
     for h in range(h_size):
 
