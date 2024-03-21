@@ -553,17 +553,18 @@ def local_to_global_list(input_tensor):
 
         for w in range(w_size):
 
-            input_tensor[:,1,h,w] /=3
-            input_tensor[:,2,h,w] /=2
+            input_tensor[:,h,w,1] /=3
+            input_tensor[:,h,w,2] /=2
 
-            input_tensor[:,1,h,w] += (w*1)/w_size
-            input_tensor[:,2,h,w] += (h*1)/h_size
+            input_tensor[:,h,w,1] += (w*1)/w_size
+            input_tensor[:,h,w,2] += (h*1)/h_size
 
-            input_tensor[:,3,h,w] /=3
-            input_tensor[:,4,h,w] /=2
+            input_tensor[:,h,w,3] /=3
+            input_tensor[:,h,w,4] /=2
 
     new_tensor = input_tensor.view(-1, input_tensor.size(-1), input_tensor.size(-1))
-    mask = new_tensor[:, :, 0] != 0
+    new_tensor_sigmoid = torch.sigmoid(new_tensor[:, :, 0])
+    mask = new_tensor_sigmoid > 0.5
     filtered_tensors = [new_tensor[i][mask[i]] for i in range(new_tensor.size(0))]
 
     for each in filtered_tensors:
