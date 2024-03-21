@@ -1,3 +1,2 @@
-batch=64, epoch=5,lr=0.01, momentum=0.9, weight_decay=0.001
-Training performance: Accuracy = 0.15624579124579124, IOU = 0.19584936035213166, Overall = 0.17604757579896146
-Validation performance: Accuracy = 0.10727272727272727, IOU = 0.1865663360807579, Overall = 0.1469195316767426
+Training performance: [tensor(0.9242, device='cuda:0'), 0.450063287543454, tensor(0.6871, device='cuda:0')]
+Validation performance:[tensor(0.8847, device='cuda:0'), 0.44652688964407844, tensor(0.6656, device='cuda:0')]
