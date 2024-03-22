@@ -46,7 +46,9 @@ class Timer():
 
 
 class LocalizationLoss(nn.Module):
-    """Custom loss function for a object localization task"""
+    """
+    Custom loss class for an object localization task
+    """
     def __init__(self):
         super().__init__()
         self.L_a = nn.BCEWithLogitsLoss()  # detection loss
@@ -55,6 +57,9 @@ class LocalizationLoss(nn.Module):
         self.L_c_binary = nn.BCEWithLogitsLoss() # binary classification loss
 
     def forward(self, y_pred, y_true):
+        """
+        Calculates the loss
+        """
         det_pred = y_pred[:, 0]
         bbox_pred = y_pred[:, 1:5]
         class_pred = y_pred[:, 5:]
@@ -80,12 +85,17 @@ class LocalizationLoss(nn.Module):
 
 
 class DetectionLoss(nn.Module):
-    """Custom loss function for a object detection task"""
+    """
+    Custom loss class for an object detection task
+    """
     def __init__(self):
         super().__init__()
         self.Localization_loss = LocalizationLoss()
 
     def forward(self, y_pred, y_true):
+        """
+        Calculates the loss
+        """
         y_pred_reshaped = y_pred.permute(0,2,3,1)
         y_pred_reshaped = y_pred_reshaped.reshape(-1, y_pred_reshaped.size(-1))
 

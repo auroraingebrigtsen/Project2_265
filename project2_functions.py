@@ -23,8 +23,11 @@ from project2_constants import DEVICE as device
 from project2_constants import SEED
 
 
-def count_instances(data, data_name=None) -> None:
-    """Counts the number of instances of each class in a object localization dataset"""
+def count_instances(data:torch.Tensor, data_name=None) -> None:
+    """
+    Counts the number of instances of each class in a object localization dataset.
+    If P_c is 0, counts the class as 99
+    """
     counter = Counter([99 if label[0] == 0 else int(label[-1]) for _, label in data])
     sorted_counter = dict(sorted(counter.items()))
     if data_name is not None:
@@ -33,9 +36,13 @@ def count_instances(data, data_name=None) -> None:
         print(f'{key}: {value}') 
 
 
-def plot_localization_data(imgs, y_true, y_preds=None, class_label:int=None, start_idx:int=0, save_dir='test_results/', fig_name='new', save_model=False) -> None:
-    """If class_label is None, plots the first image of each class in the dataset.
-    If class_label is spesificed, plots a subplot with 10 images from a given class, starting at a chosen index"""
+def plot_localization_data(imgs:torch.Tensor, y_true:torch.Tensor, y_preds:torch.Tensor=None, class_label:int=None, start_idx:int=0, save_dir:str='test_results/', fig_name='new', save_model:bool=False) -> None:
+    """
+    Function used for plotting in object localization.
+    If class_label is None, plots the first image of each class in the dataset starting at start_idx, with predictions if given. 
+    If class_label is spesificed, plots a subplot with 10 images from a given class, starting at a chosen index, with predictions if given
+    Saves results if save_model is True
+    """
     
     plot_predictions = y_preds is not None
     class_specified = class_label is not None
@@ -104,7 +111,10 @@ def plot_localization_data(imgs, y_true, y_preds=None, class_label:int=None, sta
         plt.savefig(save_dir+fig_name+'_bbox_pred', bbox_inches='tight')
 
 
-def fc_size(size, layers):
+def fc_size(size:tuple, layers) -> int:
+    """
+    Calculates the input size of the first FC layer, given the input size of the image, and the layer objects in the model
+    """
     input_size = size
 
     for layer in layers:
@@ -118,7 +128,10 @@ def fc_size(size, layers):
     return int(network_size)
         
 
-def get_output_size(input_size:tuple, layer:nn.Module):
+def get_output_size(input_size:tuple, layer:nn.Module) -> tuple:
+    """
+    Computes the output size of a given layer. Input size must be specified.
+    """
     padding = int_to_pair(layer.padding)
     stride = int_to_pair(layer.stride)
     kernel = int_to_pair(layer.kernel_size)
@@ -137,7 +150,7 @@ def get_output_size(input_size:tuple, layer:nn.Module):
     return (width_out, height_out, channels)
 
 
-def int_to_pair(n):
+def int_to_pair(n) -> tuple:
     """
     Return `(n, n)` if `n` is an int or `n` if it is already a tuple of length 2
     """
@@ -151,9 +164,9 @@ def int_to_pair(n):
         raise ValueError("Please give an int or a pair of int")
     
 
-def localization_performance(model, loader):
+def localization_performance(model, loader) -> list:
     '''
-    Function that uses a model to predict and calculate accuracy
+    Calculates accuracy and IOU. Returns Accuracy, IOU and the mean of IOU and Accuracy respectively.
     '''
     model.eval()
     correct = 0
@@ -190,7 +203,9 @@ def localization_performance(model, loader):
 
 
 def plot_loss(train_loss:list, val_loss:list, title:str, save_dir='test_results/', save_model=False) -> None:
-    """Plots the training and validation loss"""
+    """
+    Plots the training and validation loss over epochs
+    """
     _, ax = plt.subplots()
     ax.plot(np.arange(1,len(train_loss)+1), train_loss, label='Training loss')
     ax.plot(np.arange(1,len(val_loss)+1), val_loss, label='Validation loss')
@@ -205,7 +220,10 @@ def plot_loss(train_loss:list, val_loss:list, title:str, save_dir='test_results/
     plt.show()
 
 
-def plot_lists(data, loss_names:list, title:str, save_dir='test_results/', save_model=False):
+def plot_lists(data, loss_names:list, title:str, save_dir='test_results/', save_model=False) -> None:
+    """
+    Plots losses of seperate loss functions over epochs
+    """
     transposed_data = list(map(list, zip(*data)))
     for i, column in enumerate(transposed_data):
         plt.plot(column, label=f'{loss_names[i]}')
@@ -220,10 +238,12 @@ def plot_lists(data, loss_names:list, title:str, save_dir='test_results/', save_
     plt.show()
     
 
-def train(n_epochs, optimizer, model, loss_fn, train_loader, val_loader, performance_calculator):
+def train(n_epochs:int, optimizer, model, loss_fn, train_loader, val_loader, performance_calculator):
     """
+    Trains a model, and also prints training and validation loss for each epoch. Computes training and validation performance. 
     Performance calculator should be a function to compute performance. The performance should be returned from the function in a list
     with the main metric as pos -1. 
+    Returns training loss, validation loss, training performance, validation performance and the seperate losses L_a, L_b and L_c) trough epochs, respectively.
     """
     
     n_batch_train = len(train_loader)
@@ -287,11 +307,8 @@ def train(n_epochs, optimizer, model, loss_fn, train_loader, val_loader, perform
         time_spent += timer.stop_timer()
         time_left = (time_spent/epoch)*(n_epochs-epoch)
                 
-        #if epoch == 1 or epoch % 10 == 0:
         print('{}  |  Epoch {}  |  Training loss {:.3f}'.format(datetime.now().strftime('%H:%M:%S'), epoch, loss_train / n_batch_train))
         print('{}  |  Epoch {}  |  Validation loss {:.3f}'.format(datetime.now().strftime('%H:%M:%S'), epoch, loss_val / n_batch_val))
-        #print('{}  |  Epoch {}  |  loss {}'.format(datetime.now().strftime('%H:%M:%S'), epoch, losses_separated[epoch - 1]))
-
         print(f"Estimated time left: {floor(time_left/60)}m {round(time_left%60)}s")
     
     train_performance = performance_calculator(model, train_loader)
@@ -303,21 +320,26 @@ def train(n_epochs, optimizer, model, loss_fn, train_loader, val_loader, perform
     
 
 def model_selector(models:list, performances:list):
-    """Given a list of models, returns the model that has best accuracy score on validation data"""
+    """
+    Given a list of models, returns the model that has best accuracy score on validation data.
+    Performances should be a list with main metric as pos -1.
+    """
     best_model = None
     best_performance = 0
 
     for idx, model in enumerate(models):
-        if performances[idx] > best_performance:
+        if performances[idx][-1] > best_performance:
             best_model = model
-            best_performance = performances[idx]
+            best_performance = performances[idx][-1]
 
     return best_model, best_performance
 
 
 def predict(model, loader, binary_class = False):
     '''
-    Function that creates a y and y_pred tensor given a model and a loader
+    Makes predictions given a model and a loader.
+    If binary_class is True, applies sigmoid to the pos -1 at each output, and sets class 1 if 
+    > 0.5 and 0 if not. 
     '''
     model.eval()
     
@@ -346,7 +368,7 @@ def predict(model, loader, binary_class = False):
     return y_true, y_pred
 
 
-def global_to_local(labels_list:list, grid_dimension:tuple):
+def global_to_local(labels_list:list, grid_dimension:tuple) -> torch.Tensor:
     '''
     Transfers one list of tensors to local values
     '''
@@ -379,7 +401,7 @@ def global_to_local(labels_list:list, grid_dimension:tuple):
 
     return local_tensor
 
-def prepare_labels(label_dataset:list, grid_dimension:tuple):
+def prepare_labels(label_dataset:list, grid_dimension:tuple) -> torch.Tensor:
     '''
     Iterates through each listed tensor, transforms from global to local coordinates, and stacks them into a new tensor.
     '''
@@ -397,9 +419,11 @@ def merge_datasets(d1, d2):
 
 
 
-def plot_detection_data(imgs, y_true, y_pred=None, start_idx=0, save_dir='test_results/', fig_name='new', save_model=False):
+def plot_detection_data(imgs:torch.Tensor, y_true, y_pred, start_idx:int=0, save_dir:str='test_results/', fig_name:str='new', save_model:bool=False) -> None:
     """
-    Data should be global
+    Plots detection data. Expects y_true and y_pred to be global.
+    If y_pred is not specified, plots the true labels starting from index 0. 
+    If y_pred is specified, plots the corresponding predictions as well.
     """
     _, axes = plt.subplots(nrows=2, ncols=5, figsize=(8,3))
 
@@ -438,7 +462,7 @@ def plot_detection_data(imgs, y_true, y_pred=None, start_idx=0, save_dir='test_r
         plt.savefig(save_dir+fig_name+'_bbox_pred', bbox_inches='tight')
 
 
-def _convert_box(label, w, h):
+def _convert_box(label:torch.Tensor, w:int, h:int) -> torch.Tensor:
     """
     Used to slice out the bbox from a label. Scales the bbox according to image width and image heigth.
     Uses pytorch's function box_convert to change format of tensor
@@ -457,14 +481,14 @@ def _convert_box(label, w, h):
     return converted_bbox
 
 
-def calculate_ap(outputs_reshaped, labels_reshaped):
+def calculate_ap(outputs_reshaped, labels_reshaped, treshold:float = 0.5):
     """
-    A function to calculate the average presicion
+    Calculates Average Precision.
+    Treshold is the limit that decides wheter a tensor is a TP or FP. 
+    TP = IOU ≥ threshold, FP = IOU < threshold
     """
-    treshold = 0.5
-
-    confidence = F.sigmoid(outputs_reshaped[:, 0])
-    iou = calculate_iou(outputs_reshaped, labels_reshaped)
+    confidence = F.sigmoid(outputs_reshaped[:, 0])  # calculate confidences
+    iou = calculate_iou(outputs_reshaped, labels_reshaped)  # calculate IOU
     tp = torch.where(iou >= treshold, 1, 0)
     fp = torch.where(iou < treshold, 1, 0)
 
@@ -480,6 +504,7 @@ def calculate_ap(outputs_reshaped, labels_reshaped):
 
     counter = 0
 
+    # calculate recall and precision accumulated, starting from the prediction with highest confidence
     for i in indices:
         if counter == 0:
             acc_tp[counter] = tp[i]
@@ -494,7 +519,8 @@ def calculate_ap(outputs_reshaped, labels_reshaped):
         recall[counter] = acc_tp[counter]/ground_truths
 
         counter += 1
-        
+
+    # 11-point interpolation    
     interpolated_sum = 0
 
     recall_levels = torch.arange(0, 1.1, 0.1)
@@ -507,10 +533,9 @@ def calculate_ap(outputs_reshaped, labels_reshaped):
     return interpolated_sum / len(recall_levels)
 
 
-def detection_performance(model, loader):
+def detection_performance(model, loader) -> list:
     '''
-    A function to calculate the performance measure.
-    This performance uses average precision.
+    Calculates detection performance, mAP, which is the mean of AP across classes. 
     '''
     model.eval()
     map_sum = 0
@@ -531,7 +556,7 @@ def detection_performance(model, loader):
             classes = torch.unique(y_true_reshaped[:,-1])
             
             ap_sum = 0
-            
+
             for each in classes:
                 mask = y_true_reshaped[:,-1] == each
 
@@ -548,7 +573,6 @@ def calculate_iou(outputs, labels):
     """
     Calculate IoU between ground truth and predicted boxes.
     """
-
     bbox_pred = outputs[:, 1:5]
     bbox_true = labels[:, 1:5]
 
@@ -557,11 +581,14 @@ def calculate_iou(outputs, labels):
 
     bbox_iou = box_iou(converted_bbox_pred,converted_bbox_true)
     
-    iou = bbox_iou.diag()
+    iou = bbox_iou.diag()  # selects only diagonal IOU's, since bbox_iou returns  pairwise IoU values for every element in boxes1 and boxes2
     
     return iou
 
-def local_to_global_list(input_tensor):
+def local_to_global_list(input_tensor:torch.Tensor):
+    """
+    Changes a local tensor back to the original listed format.
+    """
 
     input_tensor = input_tensor.clone()
 
