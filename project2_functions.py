@@ -46,6 +46,11 @@ def plot_localization_data(imgs:torch.Tensor, y_true:torch.Tensor, y_preds:torch
     
     plot_predictions = y_preds is not None
     class_specified = class_label is not None
+    
+    imgs = imgs.cpu()
+    y_true = y_true.cpu()
+    if plot_predictions:
+        y_preds = y_preds.cpu()
 
     if class_specified:
         class_mask = (y_true[:, -1] == class_label) & (y_true[:, 0] == 1)
