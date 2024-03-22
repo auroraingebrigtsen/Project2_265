@@ -164,6 +164,7 @@ def localization_performance(model, loader):
     correct = 0
     total = 0
     iou_sum = 0
+    total_iou = 0
 
     with torch.inference_mode():
         for imgs, labels in loader:
@@ -181,13 +182,15 @@ def localization_performance(model, loader):
             class_true = labels[:, -1].int()
 
             total += labels.shape[0]
+            total_iou += outputs[object_detected].shape[0]
+            
             correct += ((object_detected == 0) & (det_true == 0)).sum()
             correct += ((object_detected == 1) & (det_true == 1) & (class_pred == class_true)).sum()
 
             iou_sum += calculate_iou(outputs[object_detected], labels[object_detected]).sum().item()
             
     acc =  correct / total
-    iou = iou_sum / total
+    iou = iou_sum / total_iou
 
     performance = (acc + iou) / 2
     
@@ -554,8 +557,8 @@ def calculate_iou(outputs, labels):
     Calculate IoU between ground truth and predicted boxes.
     """
 
-    bbox_pred = outputs[:, 1:5]
-    bbox_true = labels[:, 1:5]
+    bbox_pred = outputs[:, 1:5].clone()
+    bbox_true = labels[:, 1:5].clone()
 
     converted_bbox_pred = box_convert(bbox_pred, in_fmt='cxcywh', out_fmt='xyxy')
     converted_bbox_true = box_convert(bbox_true, in_fmt='cxcywh', out_fmt='xyxy')
