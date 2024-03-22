@@ -427,7 +427,7 @@ def merge_datasets(d1, d2):
 
 
 
-def plot_detection_data(imgs:torch.Tensor, y_true, y_pred, start_idx:int=0, save_dir:str='test_results/', fig_name:str='new', save_model:bool=False) -> None:
+def plot_detection_data(imgs:torch.Tensor, y_true, y_pred=None, start_idx:int=0, save_dir:str='test_results/', fig_name:str='new', save_model:bool=False) -> None:
     """
     Plots detection data. Expects y_true and y_pred to be global.
     If y_pred is not specified, plots the true labels starting from index 0. 
