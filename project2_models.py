@@ -17,9 +17,9 @@ from math import floor, sqrt
 import time
 import random
 
-from project_functions import fc_size
-from project_constants import DEVICE as device
-from project_constants import SEED
+from project2_functions import fc_size
+from project2_constants import DEVICE as device
+from project2_constants import SEED
 
 
 class LocCNN1(nn.Module):
